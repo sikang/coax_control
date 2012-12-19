@@ -15,21 +15,21 @@
 #include <coax_msgs/CoaxState.h>
 #include <coax_msgs/CoaxRawControl.h>
 #include <coax_msgs/CoaxControl.h>
-#include <coax_msgs/CoaxReachNavState.h>
-#include <coax_msgs/CoaxConfigureComm.h>
-#include <coax_msgs/CoaxSetTimeout.h>
 #include <sstream>
 #include <fstream>
-#include <coax_vision/SetNavMode.h>
-#include <coax_vision/SetControlMode.h>
 #include <coax_msgs/viconState.h>
 #include <coax_msgs/viconControl.h>
 
 struct param {
 	double motor_const1;
 	double motor_const2;
+	double yaw_coef1;
+	double yaw_coef2;
+	double thr_coef1;
+	double thr_coef2;
 	double r_rc_coef;
 	double p_rc_coef;
+  double k;
   
 	double kT_up;
 	double kT_lo;
@@ -93,24 +93,18 @@ struct param {
  };
 
 
-class CoaxVisionControl 
+class Controller 
 {
 
 	public:
-	CoaxVisionControl(ros::NodeHandle&);
-	~CoaxVisionControl();
+	Controller(ros::NodeHandle&);
+	~Controller();
 
 	void loadParams(ros::NodeHandle & n);
-	bool reachNavState(int des_state, float timeout);
-	bool configureComm(int frequency, int contents);
-	bool configureControl(size_t rollMode, size_t pitchMode, size_t yawMode, size_t altitudeMode);
-	bool setTimeout(size_t control_timeout_ms, size_t watchdog_timeout_ms);
 
-	bool setNavMode(coax_vision::SetNavMode::Request &req, coax_vision::SetNavMode::Response &out);
-	bool setControlMode(coax_vision::SetControlMode::Request &req, coax_vision::SetControlMode::Response &out);
-  void viconCallback(const nav_msgs::Odometry::ConstPtr & vicon);
+	void viconCallback(const nav_msgs::Odometry::ConstPtr & vicon);
 	void StateCallback(const coax_msgs::CoaxState::ConstPtr & msg);
-  void imgCallback(const coax_msgs::imgState::ConstPtr & img);
+	void imgCallback(const coax_msgs::imgState::ConstPtr & img);
 	void set_hover(void);
 	void set_localize(void);
 	void set_landing(void);
@@ -118,26 +112,20 @@ class CoaxVisionControl
 	void visionControl(void);
 	bool rotorReady(void);
 	void controlPublisher(size_t rate_t);
-	
+
 	bool setRawControl(double motor_up,double motor_lo, double servo_ro,double servo_pi);
- // ros::Subscriber vicon_state_sub;
+	// ros::Subscriber vicon_state_sub;
   //ros::Subscriber coax_state_sub;
 private:
-	ros::ServiceClient reach_nav_state;
-	ros::ServiceClient configure_comm;
-	ros::ServiceClient configure_control;
-	ros::ServiceClient set_timeout;
   
 	ros::Subscriber vicon_state_sub;	
 	ros::Subscriber coax_state_sub;
-  ros::Subscriber img_state_sub;
+	ros::Subscriber img_state_sub;
 	ros::Publisher raw_control_pub;
 	ros::Publisher vision_control_pub;
-  ros::Publisher vicon_state_pub;
+	ros::Publisher vicon_state_pub;
 	ros::Publisher vicon_control_pub;
-  ros::Publisher sensor_state_pub;
-	ros::ServiceServer set_nav_mode;
-	ros::ServiceServer set_control_mode;
+	ros::Publisher sensor_state_pub;
 
 	bool LOW_POWER_DETECTED;
 
@@ -161,18 +149,18 @@ private:
 	double battery_voltage;
 	struct param pm;	
 	Eigen::Vector3f zT_lo;
-  Eigen::Vector3f z_sp;
+	Eigen::Vector3f z_sp;
 	Eigen::Matrix3f Rwb;
 	Eigen::Matrix3f Rbw;
-  Eigen::Matrix3f Rp;
+	Eigen::Matrix3f Rp;
 	Eigen::Vector3f rpy;
 	Eigen::Vector3f accel;
 	Eigen::Vector3f gyro;
 	Eigen::Vector4f rpyt_rc;
 	Eigen::Vector4f rpyt_rc_trim;
-  Eigen::Vector3f twist_ang;
+	Eigen::Vector3f twist_ang;
 	Eigen::Vector3f twist_ang_w;
-  double range_al;
+	double range_al;
 	double gravity;
 
 	double pos_z;
@@ -207,24 +195,24 @@ private:
 	double twist_x;
 	double twist_y;
 	double twist_z;
-  
-  double eula_a;
+
+	double eula_a;
 	double eula_b;
 	double eula_c;
-  
+
 	double dt;
 	double current;
 	double previous;	
- 
+
 
 	double u_up;
 	double u_lo;
-  double u_roll;
+	double u_roll;
 	double u_pitch;
-  int stage;
+	int stage;
 	int initial_pos;
 	int initial_position;
-  int initial_orien,flag_hrange;
+	int initial_orien,flag_hrange;
 	int initial_vicon;
 	double initial_time;
 	double initial_x,initial_y,initial_z;
@@ -232,37 +220,37 @@ private:
 	double initial_roll;
 	double initial_pitch;
 	double initial_yaw;
-  double initial_eula_c;
-  int initial_sonar;
-  double rate_yaw;
-  double rate_yaw_sum;
+	double initial_eula_c;
+	int initial_sonar;
+	double rate_yaw;
+	double rate_yaw_sum;
 	int rate_yaw_n;
-  double yaw_init;
+	double yaw_init;
 	double des_pos_x;
 	double des_pos_y;
 	double des_pos_z;
- 
-   
+
+
 	double des_vel_x;
 	double des_vel_y;
 	double des_vel_z;
 	double des_acc_z;
-  double des_pos_x_origin;
+	double des_pos_x_origin;
 	double des_pos_y_origin;
-  double h;
-  double lag_lo;
+	double h;
+	double lag_lo;
 
 	double sonar_z;
 
-  double R1,R2,Ryaw;
+	double R1,R2,Ryaw;
 
 	double hrange_sum_r,hrange_sum_l,gravity_sum;
 	double hrange_n,gravity_n;
 	double grav;
-  
+
 	double nbx,nby;
-  double nbz,nbyaw;
-	 
+	double nbz,nbyaw;
+
 	Eigen::Vector3f orien;
 	Eigen::Vector3f rate;
 	Eigen::Vector3f rate_sum;

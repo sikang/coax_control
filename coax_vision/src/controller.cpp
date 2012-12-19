@@ -1,5 +1,7 @@
 #include <iostream>
+#include <cmath>
 #include <vector>
+#include <queue>
 #include <cmath>
 #include <algorithm>
 #include <coax_msgs/viconState.h>
@@ -8,28 +10,22 @@
 #include <coax_msgs/CoaxConfigureControl.h>
 #include <coax_msgs/imgState.h>
 #include <math.h>
-#include <com/sbapi.h>
-#include <CoaxVisionControl.h>
+#include <Controller.h>
 #include <nav_msgs/Odometry.h>
 
 #ifndef PI
 #define PI 3.14159
 #endif
 
-CoaxVisionControl::CoaxVisionControl(ros::NodeHandle &node)
+Controller::Controller(ros::NodeHandle &node)
 	:
-
-		reach_nav_state(node.serviceClient<coax_msgs::CoaxReachNavState>("reach_nav_state"))
-		,configure_comm(node.serviceClient<coax_msgs::CoaxConfigureComm>("configure_comm"))
-		,configure_control(node.serviceClient<coax_msgs::CoaxConfigureControl>("configure_control"))
-		,set_timeout(node.serviceClient<coax_msgs::CoaxSetTimeout>("set_timeout"))
-		,vicon_state_sub(node.subscribe("coax_57/vicon/odom",1,&CoaxVisionControl::viconCallback,this))
-		,coax_state_sub(node.subscribe("state",1, &CoaxVisionControl::StateCallback,this))
-		,img_state_sub(node.subscribe("image_state",1,&CoaxVisionControl::imgCallback,this))
-		,raw_control_pub(node.advertise<coax_msgs::CoaxRawControl>("rawcontrol",1))
-		,vision_control_pub(node.advertise<coax_msgs::CoaxControl>("visioncontrol",1))
-		,vicon_state_pub(node.advertise<coax_msgs::viconState>("vicon_state",1))
-		,vicon_control_pub(node.advertise<coax_msgs::viconControl>("vicon_control",1))
+	vicon_state_sub(node.subscribe("coax_57/vicon/odom",1,&Controller::viconCallback,this))
+	,coax_state_sub(node.subscribe("state",1, &Controller::StateCallback,this))
+	,img_state_sub(node.subscribe("image_state",1,&Controller::imgCallback,this))
+	,raw_control_pub(node.advertise<coax_msgs::CoaxRawControl>("rawcontrol",1))
+	,vision_control_pub(node.advertise<coax_msgs::CoaxControl>("visioncontrol",1))
+	,vicon_state_pub(node.advertise<coax_msgs::viconState>("vicon_state",1))
+	,vicon_control_pub(node.advertise<coax_msgs::viconControl>("vicon_control",1))
 	,sensor_state_pub(node.advertise<nav_msgs::Odometry>("sensor_state",1))
 	,LOW_POWER_DETECTED(false)
 	,CONTROL_MODE(CONTROL_LANDED)
@@ -50,8 +46,8 @@ CoaxVisionControl::CoaxVisionControl(ros::NodeHandle &node)
 	,accel(0,0,0), gyro(0,0,0), rpyt_rc(0,0,0,0), rpyt_rc_trim(0,0,0,0)
 	,range_al(0.0)
 	,pos_z(0.0),vel_z(0.0)
+	,global_x(0),global_y(0),global_z(0.0),twist_z(0.0)
 	,motor_up(0),motor_lo(0)
-	,global_x(0),global_y(0),global_z(0.0)
 	,servo_roll(0),servo_pitch(0)
 	,roll_trim(0),pitch_trim(0)
 	,motor1_des(0.0),motor2_des(0.0),servo1_des(0.0),servo2_des(0.0)
@@ -63,8 +59,6 @@ CoaxVisionControl::CoaxVisionControl(ros::NodeHandle &node)
 	,des_acc_z(0.0),des_pos_x_origin(0.0),des_pos_y_origin(0.0)
 ,Ryaw(0.0001),hrange_sum_r(0.0),hrange_sum_l(0.0),gravity_sum(0.0),hrange_n(0),gravity_n(0),nbx(0.0),nby(0.0),nbz(0.0),img_yaw(0.0),stop_flag(0)
 {  
-	set_nav_mode = node.advertiseService("set_nav_mode", &CoaxVisionControl::setNavMode, this);
-	set_control_mode = node.advertiseService("set_control_mode", &CoaxVisionControl::setControlMode, this);
 	state_x << 0,
 		0,
 		0;
@@ -85,7 +79,7 @@ CoaxVisionControl::CoaxVisionControl(ros::NodeHandle &node)
 	P_z = P_x;
 	P_yaw = P_x;
 	P_y = P_x;
-
+  
 	orien<<0,
 		0,
 		0;
@@ -105,14 +99,17 @@ CoaxVisionControl::CoaxVisionControl(ros::NodeHandle &node)
 		0;
 	initial_r = 0;
 	initial_l = 0;
-	twist_z = 0;
 }
 
-CoaxVisionControl::~CoaxVisionControl() {}
+Controller::~Controller() {}
 
-void CoaxVisionControl::loadParams(ros::NodeHandle &n) {
+void Controller::loadParams(ros::NodeHandle &n) {
 	n.getParam("motorconst/const1",pm.motor_const1);
 	n.getParam("motorconst/const2",pm.motor_const2);
+	n.getParam("yawcoef/coef1",pm.yaw_coef1);
+	n.getParam("yawcoef/coef2",pm.yaw_coef2);
+	n.getParam("throttlecoef/coef1",pm.thr_coef1);
+	n.getParam("throttlecoef/coef2",pm.thr_coef2);
 	n.getParam("rollrccoef/coef",pm.r_rc_coef);
 	n.getParam("pitchrccoef/coef",pm.p_rc_coef);
 	n.getParam("yawcontrol/proportional",pm.kp_yaw);
@@ -175,145 +172,11 @@ void CoaxVisionControl::loadParams(ros::NodeHandle &n) {
 	n.getParam("center/z",pm.center_z);
 }
 
-//===================
-// Service Clients
-//===================
-
-bool CoaxVisionControl::reachNavState(int des_state, float timeout) {
-	coax_msgs::CoaxReachNavState srv;
-	srv.request.desiredState = des_state;
-	srv.request.timeout = timeout;
-	reach_nav_state.call(srv);	
-	return 0;
-}
-
-bool CoaxVisionControl::configureComm(int frequency, int contents) {
-	coax_msgs::CoaxConfigureComm srv;
-	srv.request.frequency = frequency;
-	srv.request.contents = contents;
-	configure_comm.call(srv);
-
-	return 0;
-}
-
-bool CoaxVisionControl::configureControl(size_t rollMode, size_t pitchMode, size_t yawMode, size_t altitudeMode) {
-	coax_msgs::CoaxConfigureControl srv;
-	srv.request.rollMode = rollMode;
-	srv.request.pitchMode = pitchMode;
-	srv.request.yawMode = yawMode;
-	srv.request.altitudeMode = altitudeMode;
-	configure_control.call(srv);
-	//ROS_INFO("called configure control");
-	return 0;
-}
-
-bool CoaxVisionControl::setTimeout(size_t control_timeout_ms, size_t watchdog_timeout_ms) {
-	coax_msgs::CoaxSetTimeout srv;
-	srv.request.control_timeout_ms = control_timeout_ms;
-	srv.request.watchdog_timeout_ms = watchdog_timeout_ms;
-	set_timeout.call(srv);
-
-	return 0;
-}
-//==============
-//ServiceServer
-//==============
-bool CoaxVisionControl::setNavMode(coax_vision::SetNavMode::Request &req, coax_vision::SetNavMode::Response &out) {
-	out.result = 0;
-
-	switch (req.mode) 
-	{	
-		case SB_NAV_STOP:
-			break;
-		case SB_NAV_IDLE:
-			break;
-	}
-	return 0;
-}
-
-bool CoaxVisionControl::setControlMode(coax_vision::SetControlMode::Request &req, coax_vision::SetControlMode::Response &out) {
-	out.result = 0;
-
-	switch (req.mode) 
-	{
-		case 1:
-			if (CONTROL_MODE != CONTROL_LANDED){
-				ROS_INFO("Start can only be executed from mode CONTROL_LANDED");
-				out.result = -1;
-				break;
-			}
-
-			if (coax_nav_mode != SB_NAV_RAW) {
-				if (coax_nav_mode != SB_NAV_STOP) {
-					reachNavState(SB_NAV_STOP, 0.5);
-					ros::Duration(0.5).sleep(); // make sure CoaX is in SB_NAV_STOP mode
-				}
-				reachNavState(SB_NAV_RAW, 0.5);
-			}
-			// switch to start procedure
-			INIT_DESIRE = false;
-			init_count = 0;
-			rotor_ready_count = 0;
-			CONTROL_MODE = CONTROL_START;
-			motor1_des = 0;
-			motor2_des = 0;
-			servo1_des = 0;
-			servo2_des = 0;
-			stage = 0;
-			break;
-		case 2:
-			if(stage==-1||stage==2){
-				stage = 1;
-				break;
-			}
-			out.result = -1;
-			ROS_WARN("check the state, not ready for mode HOVER");
-			break;
-		case 3:
-			if(stage!=1){
-				out.result = -1;
-				ROS_WARN("check the state,not ready for mode LOCALIZE");
-				break;
-			}
-			stage = 2;
-			initial_pos=0;
-			break;
-
-		case 4:
-			if(stage ==1||stage ==2){
-				stage = 3;
-				ROS_INFO("LANDING...");
-				break;}
-				out.result = -1;
-				ROS_WARN("check the state, not ready for LANDING");
-				break;
-		case 9:
-				motor1_des = 0;
-				motor2_des = 0;
-				servo1_des = 0;
-				servo2_des = 0;
-				roll_trim = 0;
-				pitch_trim = 0;
-
-				reachNavState(SB_NAV_STOP, 0.5);
-
-				rotor_ready_count = -1;
-				CONTROL_MODE = CONTROL_LANDED;
-				break;
-
-		default:
-				ROS_INFO("Non existent control mode request!");
-				out.result = -1;		
-	}
-	return true;
-}
-
-
 //==============
 // Subscriber
 //==============
 
-void CoaxVisionControl::viconCallback(const nav_msgs::Odometry::ConstPtr & vicon){
+void Controller::viconCallback(const nav_msgs::Odometry::ConstPtr & vicon){
 
 	q_w=vicon->pose.pose.orientation.w;
 	q_x=vicon->pose.pose.orientation.x;
@@ -323,17 +186,17 @@ void CoaxVisionControl::viconCallback(const nav_msgs::Odometry::ConstPtr & vicon
 	eula_b=asin(2*(q_w*q_y-q_z*q_x));
 	eula_c=atan2(2*(q_w*q_z+q_x*q_y),(1-2*(q_y*q_y+q_z*q_z)));
 	/*
-	   Rwb(0,0)=cos(eula_c)*cos(eula_b);
-	   Rwb(0,1)=cos(eula_c)*sin(eula_b)*sin(eula_a)-sin(eula_c)*cos(eula_a);
-	   Rwb(0,2)=cos(eula_c)*sin(eula_b)*cos(eula_a)+sin(eula_c)*sin(eula_a);
-	   Rwb(1,0)=sin(eula_c)*cos(eula_b);
-	   Rwb(1,1)=sin(eula_c)*sin(eula_b)*sin(eula_a)+cos(eula_c)*cos(eula_a);
-	   Rwb(1,2)=sin(eula_c)*sin(eula_b)*cos(eula_a)-cos(eula_c)*sin(eula_a);
-	   Rwb(2,0)=-sin(eula_b);
-	   Rwb(2,1)=cos(eula_b)*sin(eula_a);
-	   Rwb(2,2)=cos(eula_b)*cos(eula_a);
-	   Rbw = Rwb.transpose();
-	 */
+  Rwb(0,0)=cos(eula_c)*cos(eula_b);
+	Rwb(0,1)=cos(eula_c)*sin(eula_b)*sin(eula_a)-sin(eula_c)*cos(eula_a);
+	Rwb(0,2)=cos(eula_c)*sin(eula_b)*cos(eula_a)+sin(eula_c)*sin(eula_a);
+	Rwb(1,0)=sin(eula_c)*cos(eula_b);
+	Rwb(1,1)=sin(eula_c)*sin(eula_b)*sin(eula_a)+cos(eula_c)*cos(eula_a);
+	Rwb(1,2)=sin(eula_c)*sin(eula_b)*cos(eula_a)-cos(eula_c)*sin(eula_a);
+	Rwb(2,0)=-sin(eula_b);
+	Rwb(2,1)=cos(eula_b)*sin(eula_a);
+	Rwb(2,2)=cos(eula_b)*cos(eula_a);
+	Rbw = Rwb.transpose();
+*/
 	global_x=vicon->pose.pose.position.x;
 	global_y=vicon->pose.pose.position.y;
 	global_z=vicon->pose.pose.position.z;
@@ -352,13 +215,13 @@ void CoaxVisionControl::viconCallback(const nav_msgs::Odometry::ConstPtr & vicon
 	twist_y=vicon->twist.twist.linear.y;
 	twist_z=vicon->twist.twist.linear.z;
 	/*  
-	    twist_ang[0]=vicon->twist.twist.angular.x;
-	    twist_ang[1]=vicon->twist.twist.angular.y;
-	    twist_ang[2]=vicon->twist.twist.angular.z; 
-	    twist_ang_w = Rwb*twist_ang;
-	 */
+  twist_ang[0]=vicon->twist.twist.angular.x;
+	twist_ang[1]=vicon->twist.twist.angular.y;
+	twist_ang[2]=vicon->twist.twist.angular.z; 
+  twist_ang_w = Rwb*twist_ang;
+*/
 }
-void CoaxVisionControl::imgCallback(const coax_msgs::imgState::ConstPtr & img){
+void Controller::imgCallback(const coax_msgs::imgState::ConstPtr & img){
 	img_yaw =img->theta;
 	img_y = img->y*8/589.75*state_z[0]+state_z[0]*orien[0];	
 	img_x = img->x*8/589.75*state_z[0]+state_z[0]*orien[1];
@@ -395,9 +258,7 @@ void CoaxVisionControl::imgCallback(const coax_msgs::imgState::ConstPtr & img){
 	P_y = (I-Ky*H)*P_y;
 
 }
-void CoaxVisionControl::StateCallback(const coax_msgs::CoaxState::ConstPtr & msg) {
-	static int initTime = 200;
-	static int initCounter = 0;
+void Controller::StateCallback(const coax_msgs::CoaxState::ConstPtr & msg) {
 
 	static Eigen::Vector3f init_acc(0,0,0);
 	static Eigen::Vector3f init_gyr(0,0,0);
@@ -496,28 +357,10 @@ void CoaxVisionControl::StateCallback(const coax_msgs::CoaxState::ConstPtr & msg
 		LOW_POWER_DETECTED = true;
 	}
 
-	if (initCounter < initTime) {
-		init_acc += accel;
-		init_gyr += gyro;
-		initCounter++;
-	}
-	else if (initCounter == initTime) {
-		init_acc /= initTime;
-		gravity = init_acc.norm();
-		//setGravity(gravity);
-		ROS_INFO("IMU Calibration Done! Gravity: %f", gravity);
-		initCounter++;
-
-		//setInit(msg->header.stamp);
-	}
-	else {
-		//processUpdate(accel, gyro, msg->header.stamp);
-		//measureUpdate(range_al);
-	}
 	return;
 }
 
-bool CoaxVisionControl::setRawControl(double motor1, double motor2, double servo1, double servo2) {
+bool Controller::setRawControl(double motor1, double motor2, double servo1, double servo2) {
 	coax_msgs::CoaxRawControl raw_control;
 
 	motor_up = motor1;
@@ -597,7 +440,7 @@ bool CoaxVisionControl::setRawControl(double motor1, double motor2, double servo
 	return 1;
 }
 
-	bool CoaxVisionControl::rotorReady(void) {
+	bool Controller::rotorReady(void) {
 		if (rotor_ready_count < 0) 
 			return false;
 		if (rotor_ready_count <= 300) 
@@ -646,7 +489,7 @@ bool CoaxVisionControl::setRawControl(double motor1, double motor2, double servo
 		return true;	
 	}
 
-void CoaxVisionControl::set_hover(void){
+void Controller::set_hover(void){
 
 	if(initial_pos==0)
 	{
@@ -699,14 +542,14 @@ void CoaxVisionControl::set_hover(void){
 
 }
 
-void CoaxVisionControl::set_localize(void){
-	des_pos_x = des_pos_x_origin+pm.x_distance;
-	des_pos_y = des_pos_y_origin+pm.y_distance;
-	//des_pos_z = rpyt_rc[3]-pm.des_pos_z;
+void Controller::set_localize(void){
+des_pos_x = des_pos_x_origin+pm.x_distance;
+des_pos_y = des_pos_y_origin+pm.y_distance;
+//des_pos_z = rpyt_rc[3]-pm.des_pos_z;
 
 }
 
-void CoaxVisionControl::set_landing(void){
+void Controller::set_landing(void){
 	if(des_pos_z>0){
 		if(des_vel_z>-pm.des_vel_z){
 			des_acc_z = -pm.des_acc_z;
@@ -726,7 +569,7 @@ void CoaxVisionControl::set_landing(void){
 	}
 }
 
-void CoaxVisionControl::stabilizationControl(void) {
+void Controller::stabilizationControl(void) {
 	double Dyaw,Dyaw_rate,yaw_control;
 	double altitude_control,Daltitude, Daltitude_rate,Dx,Dy,Dx_rate,Dy_rate,C;
 	double Fdes_x,Fdes_y,Fdes_z,Mdes_z,Tup,Tlo,Wdes_up,Wdes_lo;
@@ -926,7 +769,7 @@ void CoaxVisionControl::stabilizationControl(void) {
 	}
 }
 
-void CoaxVisionControl::controlPublisher(size_t rate_t) {
+void Controller::controlPublisher(size_t rate_t) {
 	ros::Rate loop_rate(rate_t);
 
 	while(ros::ok()) {
@@ -953,17 +796,10 @@ void CoaxVisionControl::controlPublisher(size_t rate_t) {
 }
 
 int main(int argc, char **argv) {
-  ros::init(argc, argv, "CoaxVisionControl");
+	ros::init(argc, argv, "Controller");
 	ros::NodeHandle nh("~");
-	CoaxVisionControl control(nh);
+	Controller control(nh);
 	control.loadParams(nh);
-	ros::Duration(1.5).sleep(); 
-
-	control.configureComm(100, SBS_MODES | SBS_BATTERY | SBS_GYRO | SBS_ACCEL | SBS_CHANNELS | SBS_RPY | SBS_ALTITUDE_ALL |SBS_ALL);
-	// control.setTimeout(500, 5000);
-
-	control.configureControl(SB_CTRL_MANUAL, SB_CTRL_MANUAL, SB_CTRL_MANUAL, SB_CTRL_MANUAL);
-	control.setTimeout(500, 5000);
 
 	ROS_INFO("Initially Setup comm and control");
 
