@@ -1,0 +1,75 @@
+<launch>
+<machine name="coax"
+         address="192.168.129.157"
+	 user="root"
+	 ros-root="/opt/ros/electric/ros"
+	 ros-package-path="/home/root/ros:/opt/ros/electric/stacks"
+	 >
+	 <env name="ROS_IP" value="192.168.129.157"/>
+	 </machine>
+
+	 <node pkg="nodelet"
+	 machine="coax"
+	 type="nodelet"
+	 name="camera_nodelet_manager"
+	 args="manager"/>
+
+<node 
+machine="coax"
+pkg="coax_vision"
+name="img_listener"
+type="img_listener"
+output ="screen">
+</node>
+
+
+    <node 
+    machine="coax"
+    pkg="coax_server"
+          name="coax"
+          type="coax_server"
+      	  output="screen"
+          args="/dev/ttyO0">
+      <remap from="/coax_server/state" to="/state"/>
+      <remap from="/coax_server/control" to="/control"/>
+      <remap from="/coax_server/rawcontrol" to="/rawcontrol"/>
+      <remap from="/coax_server/reach_nav_state" to="/reach_nav_state"/>
+      <remap from="/coax_server/configure_comm" to="/configure_comm"/>
+      <remap from="/coax_server/configure_control" to="/configure_control"/>
+      <remap from="/coax_server/set_timeout" to="/set_timeout"/>
+    </node>
+
+    <node pkg="coax_vision"
+          name="CoaxVisionControl"
+          type="test_control"
+	  output="screen">
+      <remap from="/CoaxVisionControl/state" to="/state"/>
+      <remap from="/CoaxVisionControl/coax_57/vicon/odom" to="/coax_57/vicon/odom"/>
+      <remap from="/CoaxVisionControl/rawcontrol" to="/rawcontrol"/>
+			<remap from="/CoaxVisionControl/visioncontrol" to="/control"/>
+      <remap from="/CoaxVisionControl/vicon_state" to="vicon_state"/>
+      <remap from="/CoaxVisionControl/image_state" to="img_state"/>
+      <remap from="/CoaxVisionControl/vicon_control" to="vicon_control"/>
+      <remap from="/CoaxVisionControl/sensor_state" to="sensor_state"/>
+      <remap from="/CoaxVisionControl/reach_nav_state" to="/reach_nav_state"/>
+      <remap from="/CoaxVisionControl/configure_comm" to="/configure_comm"/>
+      <remap from="/CoaxVisionControl/configure_control" to="/configure_control"/>
+      <remap from="/CoaxVisionControl/set_timeout" to="/set_timeout"/>
+
+			<remap from="/CoaxVisionControl/set_nav_mode" to="/set_nav_mode"/>
+			<remap from="/CoaxVisionControl/set_control_mode" to="/set_control_mode"/>
+
+			<remap from="/CoaxVisionControl/image_in" to="/image_in"/>
+			<remap from="/CoaxVisionControl/image_proc" to="/image_proc"/>
+			<remap from="/CoaxVisionControl/image_debug" to="/image_debug"/>
+
+
+      <param name="frequency" value="100"/>
+
+      <rosparam file="$(find coax_vision)/config/coax_parameters.yaml"/>
+      <rosparam file="$(find coax_vision)/config/coax_control_params.yaml"/>
+      <rosparam file="$(find coax_vision)/config/coax_camera_params.yaml"/>
+
+
+    </node>
+</launch>

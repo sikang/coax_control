@@ -29,8 +29,6 @@ CoaxVisionControl::CoaxVisionControl(ros::NodeHandle &node)
 		,raw_control_pub(node.advertise<coax_msgs::CoaxRawControl>("rawcontrol",1))
 		,vision_control_pub(node.advertise<coax_msgs::CoaxControl>("visioncontrol",1))
 		,vicon_state_pub(node.advertise<coax_msgs::viconState>("vicon_state",1))
-		,vicon_control_pub(node.advertise<coax_msgs::viconControl>("vicon_control",1))
-	,sensor_state_pub(node.advertise<nav_msgs::Odometry>("sensor_state",1))
 	,LOW_POWER_DETECTED(false)
 	,CONTROL_MODE(CONTROL_LANDED)
 	,FIRST_START(false)
@@ -157,8 +155,8 @@ void CoaxVisionControl::loadParams(ros::NodeHandle &n) {
 	n.getParam("desired/Dy_max",pm.Dy_max);
 	n.getParam("inertia/Ixx",pm.Ixx);
 	n.getParam("inertia/Iyy",pm.Iyy);
-	n.getParam("filter/R1",pm.R1);
-	n.getParam("filter/R2",pm.R2);
+	n.getParam("filter/Rxy",pm.Rxy);
+	n.getParam("filter/Rz",pm.Rz);
 	n.getParam("filter/Q1",pm.Q1);
 	n.getParam("filter/Q2",pm.Q2);
 	n.getParam("filter/Q3",pm.Q3);
@@ -360,8 +358,8 @@ void CoaxVisionControl::viconCallback(const nav_msgs::Odometry::ConstPtr & vicon
 }
 void CoaxVisionControl::imgCallback(const coax_msgs::imgState::ConstPtr & img){
 	img_yaw =img->theta;
-	img_y = img->y*8/589.75*state_z[0]+state_z[0]*orien[0];	
-	img_x = img->x*8/589.75*state_z[0]+state_z[0]*orien[1];
+	img_y = img->y*4/589.75*state_z[0]+state_z[0]*orien[0];	
+	img_x = img->x*4/589.75*state_z[0]+state_z[0]*orien[1];
 	Eigen::Matrix3f I;
 	Eigen::MatrixXf H(1,3),HT(3,1);
 	Eigen::Vector3f Kyaw,Kx,Ky;
@@ -381,14 +379,14 @@ void CoaxVisionControl::imgCallback(const coax_msgs::imgState::ConstPtr & img){
 	P_yaw = (I-Kyaw*H)*P_yaw;
 
 
-	Sx = P_x(0,0)+R1;
+	Sx = P_x(0,0)+Rxy;
 	Kx = P_x*HT/Sx;
 	Yx = img_x - state_x[0];
 	state_x = state_x+Kx*Yx;
 	P_x = (I-Kx*H)*P_x;
 
 
-	Sy = P_y(0,0)+R1;
+	Sy = P_y(0,0)+Rxy;
 	Ky = P_y*HT/Sy;
 	Yy = img_y - state_y[0];
 	state_y = state_y+Ky*Yy;
@@ -404,7 +402,6 @@ void CoaxVisionControl::StateCallback(const coax_msgs::CoaxState::ConstPtr & msg
 
 	battery_voltage = msg->battery;
 	coax_nav_mode = msg->mode.navigation;
-
 	accel << msg->accel[0], -msg->accel[1], -msg->accel[2];
 	gyro << msg->gyro[0],-msg->gyro[1], -msg->gyro[2];
 	rpyt_rc << msg->rcChannel[4], msg->rcChannel[6], msg->rcChannel[2], msg->rcChannel[0];
@@ -420,8 +417,8 @@ void CoaxVisionControl::StateCallback(const coax_msgs::CoaxState::ConstPtr & msg
 		initial_pitch = orien[1];
 		initial_yaw = orien[2];
 		initial_orien += 1;	
-		R1 = pm.R1;
-		R2 = pm.R2;
+		Rxy = pm.Rxy;
+		Rz = pm.Rz;
 		Ryaw = pm.Ryaw;
 
 		Qz<<pm.Q1,0,0,
@@ -558,7 +555,7 @@ bool CoaxVisionControl::setRawControl(double motor1, double motor2, double servo
 		raw_control.servo1 = servo_roll;
 		raw_control.servo2 = servo_pitch;
 	}
-	if(stage == 3&&state_z[0]<0.05){
+	if(stage == 3&&state_z[0]<0.07){
 		raw_control.motor1 = 0;
 		raw_control.motor2 = 0;
 		raw_control.servo1 = 0;
@@ -572,16 +569,16 @@ bool CoaxVisionControl::setRawControl(double motor1, double motor2, double servo
 	if(dt>10){
 		dt=0.02;
 	}
-
+        
 	vicon_state.x=global_x;
 	vicon_state.y=global_y;
 	vicon_state.z=global_z;
 	vicon_state.vx=twist_x;
 	vicon_state.vy=twist_y;
 	vicon_state.vz=twist_z;
-	vicon_state.roll=eula_a;
-	vicon_state.pitch=eula_b;
-	vicon_state.yaw=eula_c;
+	vicon_state.roll=img_x;
+	vicon_state.pitch=img_y;
+	vicon_state.yaw=img_yaw;
 	vicon_state.state_x = state_x[0];
 	vicon_state.state_y = state_y[0];
 	vicon_state.state_z = state_z[0];
@@ -601,9 +598,8 @@ bool CoaxVisionControl::setRawControl(double motor1, double motor2, double servo
 		if (rotor_ready_count < 0) 
 			return false;
 		if (rotor_ready_count <= 300) 
-			rotor_ready_count++;
+			rotor_ready_count+=3;
 		if(sonar_z-0.2 >0&&initial_sonar==0){
-
 			initial_sonar = 1;
 		}
 		if (rotor_ready_count < 150) {
@@ -768,7 +764,7 @@ void CoaxVisionControl::stabilizationControl(void) {
 
 	AT = A.transpose();
 
-
+        
 	if(initial_orien == 1){
 		Eigen::Matrix3f A_yaw,A_yawT;
 		Eigen::Vector3f Byaw;
@@ -794,7 +790,7 @@ void CoaxVisionControl::stabilizationControl(void) {
 
 		state_z = A*state_z+Bz;
 		P_z = A*P_z*AT+Qz;
-		Sz = P_z(0,0)+R2;
+		Sz = P_z(0,0)+Rz;
 		Kz = P_z*HT/Sz;
 		Yz = sonar_z - state_z[0],
 		   state_z = state_z+Kz*Yz;
@@ -967,7 +963,7 @@ int main(int argc, char **argv) {
 
 	ROS_INFO("Initially Setup comm and control");
 
-	int frequency = 100;
+	int frequency = 60;
 	control.controlPublisher(frequency);
   ros::spin();
   return 0;

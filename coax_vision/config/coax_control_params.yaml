@@ -8,8 +8,8 @@ altitude:
   base: 0.049
 
 altitudecontrol:
- xyproportional: 0.4
- xydifferential: 0.5
+ xyproportional: 0.5
+ xydifferential: 0.8
  xyintegration: 0.000
  kp_pq: 0.0
  kd_pq: 0.05
@@ -28,8 +28,8 @@ desired:
  Dx_max: 0.2
  Dy_max: 0.2
 yawcontrol:
-  proportional: 0.01
-  differential: 0.003
+  proportional: 0.007
+  differential: 0.008
   integration: 0.000
   distance: 1.0
 pitchcontrol:
@@ -55,8 +55,8 @@ throttlecoef:
   coef2: 0.52
 
 filter:
- R1: 0.04
- R2: 0.000025
+ Rxy: 0.001
+ Rz: 0.000025
  Q1: 0.0004
  Q2: 0.0025
  Q3: 0.09
