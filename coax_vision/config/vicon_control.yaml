@@ -1,0 +1,78 @@
+imagerollcontrol:
+proportional: 0.05
+
+imageyawcontrol:
+proportional: 0.002
+
+altitude:
+base: 0.049
+
+attitudecontrol:
+xproportional: 0.8
+xdifferential: 1.0
+xintegration: 0.001
+yproportional: 0.8
+ydifferential: 1.0
+yintegration: 0.001
+kp_pq: 0.0
+kd_pq: 0.1
+k_roll: 0.5
+k_pitch: 0.5
+
+altitudecontrol:
+proportional: 2.0
+differential: 1.0
+integration: 0.01
+
+desired:
+des_pos_z: 0.8
+des_vel_z: 0.25
+des_acc_z: 0.1
+x_distance: 2.0
+y_distance: 0.0
+Dx_max: 0.2
+Dy_max: 0.2
+
+yawcontrol:
+proportional: 0.006
+differential: 0.004
+integration: 0.0000
+distance: 1.0
+pitchcontrol:
+proportional: -0.1
+differential: 0.01
+
+rate_damping:
+roll: -0.04
+pitch: 0.04
+
+motorconst:
+const1: 0.35
+const2: 0.35
+
+rollrccoef:
+coef: 0.0
+
+pitchrccoef:
+coef: 0.0
+
+throttlecoef:
+coef1: 0.52
+coef2: 0.52
+
+filter:
+R1: 0.0004
+Rz: 0.000025
+Q1: 0.0004
+Q2: 0.0025
+Q3: 0.09
+Ryaw: 0.001
+Qyaw1: 0.0004
+Qyaw2: 0.0025
+noise_x: 0.1
+noise_y: 0.1
+noise_z: 0.02
+noise_yaw: 0.1
+
+center:
+z: 0.04

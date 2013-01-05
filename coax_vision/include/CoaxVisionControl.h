@@ -56,9 +56,9 @@ struct param {
 	double kp_altitude;
 	double kd_altitude;
 	double ki_altitude;
-	double kp_xy;
-	double kd_xy;
-	double ki_xy;
+	double kp_x,kp_y;
+	double kd_x,kd_y;
+	double ki_x,ki_y;
 	double kp_pq;
 	double kd_pq;
 	double k_roll;
@@ -73,14 +73,13 @@ struct param {
 	double Dy_max;
 	double Ixx;
 	double Iyy;
-	double Rxy;
+	double R1;
 	double Rz;
 	double Q1;
 	double Q2;
 	double Q3;
-	double Q4;
-	double Q5;
-	double Q6;
+	double Qx1,Qx2,Qx3;
+	double Qy1,Qy2,Qy3;
 	double Ryaw;
 	double Qyaw1;
 	double Qyaw2;
@@ -251,7 +250,7 @@ class CoaxVisionControl
 
 		double sonar_z;
 
-		double Rxy,Rz,Ryaw;
+		double R1,Rz,Ryaw;
 
 		double hrange_sum_r,hrange_sum_l,gravity_sum;
 		double hrange_n,gravity_n;
@@ -259,7 +258,8 @@ class CoaxVisionControl
 
 		double nbx,nby;
 		double nbz,nbyaw;
-
+                double raw_x,raw_y;
+		int reach_flag;
 		Eigen::Vector3f orien;
 		Eigen::Vector3f rate;
 		Eigen::Vector3f rate_sum;
@@ -268,7 +268,7 @@ class CoaxVisionControl
 		Eigen::Vector3f state_yaw;
 		Eigen::Matrix3f P_x,P_y,P_z;
 		Eigen::Matrix3f P_yaw;
-		Eigen::Matrix3f Qy,Qz;
+		Eigen::Matrix3f Qx,Qy,Qz;
 		Eigen::Matrix3f Qyaw;
 		double img_yaw,img_x,img_y;
 		int stop_flag;

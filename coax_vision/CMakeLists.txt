@@ -47,8 +47,8 @@ rosbuild_gensrv()
 #rosbuild_add_executable(readstate src/read_state.cc)
 #rosbuild_add_executable(read_all src/read_all.cc)
 #rosbuild_add_executable(extract_images src/extract_images.cc)
-rosbuild_add_executable(test_control
-			src/test_control.cpp 
+rosbuild_add_executable(test_vicon
+			src/test_vicon.cpp 
 		        )
 #rosbuild_add_executable(img_listener src/img_listener.cpp)
 #rosbuild_add_executable(CoaxVisionControl 

@@ -7,22 +7,26 @@ imageyawcontrol:
 altitude:
   base: 0.049
 
-altitudecontrol:
- xyproportional: 1.0
- xydifferential: 1.2
- xyintegration: 0.000
+attitudecontrol:
+ xproportional: 1.0
+ xdifferential: 1.2
+ xintegration: 0.000
+ yproportional: 1.0
+ ydifferential: 1.2
+ yintegration: 0.000
  kp_pq: 0.0
  kd_pq: 0.05
- k_roll: 0.6
- k_pitch: 0.6
+ k_roll: 0.5
+ k_pitch: 0.5
+altitudeicontrol: 
  proportional: 2.0
- differential: 1.0
+ differential: 1.2
  integration: 0.01
 
 desired:
- des_pos_z: 0.6
- des_vel_z: 0.15
- des_acc_z: 0.1
+ des_pos_z: 0.8
+ des_vel_z: 0.3
+ des_acc_z: 0.2
  x_distance: 2.0
  y_distance: 0.0
  Dx_max: 0.2
@@ -30,7 +34,7 @@ desired:
 yawcontrol:
   proportional: 0.004
   differential: 0.003
-  integration: 0.000
+  integration: 0.0001
   distance: 1.0
 pitchcontrol:
   proportional: -0.1
@@ -60,13 +64,16 @@ filter:
  Q1: 0.0004
  Q2: 0.0025
  Q3: 0.09
- Q4: 0.0004
- Q5: 0.0025
- Q6: 0.09
+ Qx1: 0.01
+ Qx2: 1
+ Qx3: 4
+ Qy1: 0.01
+ Qy2: 0.1
+ Qy3: 0.1
  Ryaw: 0.001
  Qyaw1: 0.0004
  Qyaw2: 0.0025
- noise_x: 0.02
+ noise_x: 0.2
  noise_y: 0.02
  noise_z: 0.02
  noise_yaw: 0.1

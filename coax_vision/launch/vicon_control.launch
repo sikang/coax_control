@@ -1,0 +1,27 @@
+<launch>
+<node pkg="coax_vision"
+name="CoaxVisionControl"
+type="test_vicon"
+output="screen">
+<remap from="/CoaxVisionControl/state" to="/state"/>
+<remap from="/CoaxVisionControl/coax_57/vicon/odom" to="/coax_57/vicon/odom"/>
+<remap from="/CoaxVisionControl/rawcontrol" to="/rawcontrol"/>
+<remap from="/CoaxVisionControl/visioncontrol" to="/control"/>
+<remap from="/CoaxVisionControl/vicon_state" to="vicon_state"/>
+<remap from="/CoaxVisionControl/image_state" to="img_state"/>
+<remap from="/CoaxVisionControl/sensor_state" to="sensor_state"/>
+<remap from="/CoaxVisionControl/reach_nav_state" to="/reach_nav_state"/>
+<remap from="/CoaxVisionControl/configure_comm" to="/configure_comm"/>
+<remap from="/CoaxVisionControl/configure_control" to="/configure_control"/>
+<remap from="/CoaxVisionControl/set_timeout" to="/set_timeout"/>
+
+<remap from="/CoaxVisionControl/set_nav_mode" to="/set_nav_mode"/>
+<remap from="/CoaxVisionControl/set_control_mode" to="/set_control_mode"/>
+
+<param name="frequency" value="100"/>
+<rosparam file="$(find coax_vision)/config/coax_parameters.yaml"/>
+<rosparam file="$(find coax_vision)/config/test_vicon.yaml"/>
+
+
+</node>
+</launch>

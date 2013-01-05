@@ -60,12 +60,13 @@ CoaxVisionControl::CoaxVisionControl(ros::NodeHandle &node)
 	,stage(0),initial_pos(0),initial_position(0),initial_orien(0),flag_hrange(0),initial_vicon(0),yaw_init(0),initial_sonar(0),rate_yaw_sum(0.0),rate_yaw_n(0),des_pos_x(0.0),des_pos_y(0.0),des_pos_z(0.04)
 	,des_acc_z(0.0),des_pos_x_origin(0.0),des_pos_y_origin(0.0)
 ,Ryaw(0.0001),hrange_sum_r(0.0),hrange_sum_l(0.0),gravity_sum(0.0),hrange_n(0),gravity_n(0),nbx(0.0),nby(0.0),nbz(0.0),img_yaw(0.0),stop_flag(0)
+	,raw_x(0),raw_y(0),reach_flag(0)
 {  
 	set_nav_mode = node.advertiseService("set_nav_mode", &CoaxVisionControl::setNavMode, this);
 	set_control_mode = node.advertiseService("set_control_mode", &CoaxVisionControl::setControlMode, this);
 	state_x << 0,
 		0,
-		0;
+                0;	
 	state_y = state_x;
 	state_z << 0.039,
 		0,
@@ -124,13 +125,16 @@ void CoaxVisionControl::loadParams(ros::NodeHandle &n) {
 	n.getParam("altitudecontrol/proportional",pm.kp_altitude);
 	n.getParam("altitudecontrol/differential",pm.kd_altitude);
 	n.getParam("altitudecontrol/integration",pm.ki_altitude);
-	n.getParam("altitudecontrol/xyproportional",pm.kp_xy);
-	n.getParam("altitudecontrol/xydifferential",pm.kd_xy);
-	n.getParam("altitudecontrol/xyintegration",pm.ki_xy); 
-	n.getParam("altitudecontrol/kp_pq",pm.kp_pq);
-	n.getParam("altitudecontrol/kd_pq",pm.kd_pq);
-	n.getParam("altitudecontrol/k_roll",pm.k_roll);
-	n.getParam("altitudecontrol/k_pitch",pm.k_pitch);
+	n.getParam("attitudecontrol/xproportional",pm.kp_x);
+	n.getParam("attitudecontrol/xdifferential",pm.kd_x);
+	n.getParam("attitudecontrol/xintegration",pm.ki_x); 
+	n.getParam("attitudecontrol/yproportional",pm.kp_y);
+	n.getParam("attitudecontrol/ydifferential",pm.kd_y);
+	n.getParam("attitudecontrol/yintegration",pm.ki_y); 
+	n.getParam("attitudecontrol/kp_pq",pm.kp_pq);
+	n.getParam("attitudecontrol/kd_pq",pm.kd_pq);
+	n.getParam("attitudecontrol/k_roll",pm.k_roll);
+	n.getParam("attitudecontrol/k_pitch",pm.k_pitch);
 	n.getParam("linkage_factor/lower",pm.L_lo);
 	n.getParam("max_swashplate_angle",pm.theta_max);
 	n.getParam("phase_lag/slope/lower",pm.mL_lo);
@@ -160,8 +164,9 @@ void CoaxVisionControl::loadParams(ros::NodeHandle &n) {
 	n.getParam("filter/Q1",pm.Q1);
 	n.getParam("filter/Q2",pm.Q2);
 	n.getParam("filter/Q3",pm.Q3);
+
 	n.getParam("filter/Qx1",pm.Qx1);
-	n.getParam("filter/QX2",pm.Qx2);
+	n.getParam("filter/Qx2",pm.Qx2);
 	n.getParam("filter/Qx3",pm.Qx3);
 	n.getParam("filter/Qy1",pm.Qy1);
 	n.getParam("filter/Qy2",pm.Qy2);
@@ -323,8 +328,8 @@ void CoaxVisionControl::viconCallback(const nav_msgs::Odometry::ConstPtr & vicon
 	eula_a=atan2(2*(q_w*q_x+q_y*q_z),(1-2*(q_x*q_x+q_y*q_y)));
 	eula_b=asin(2*(q_w*q_y-q_z*q_x));
 	eula_c=atan2(2*(q_w*q_z+q_x*q_y),(1-2*(q_y*q_y+q_z*q_z)));
-	/*
-	   Rwb(0,0)=cos(eula_c)*cos(eula_b);
+	
+	Rwb(0,0)=cos(eula_c)*cos(eula_b);
 	   Rwb(0,1)=cos(eula_c)*sin(eula_b)*sin(eula_a)-sin(eula_c)*cos(eula_a);
 	   Rwb(0,2)=cos(eula_c)*sin(eula_b)*cos(eula_a)+sin(eula_c)*sin(eula_a);
 	   Rwb(1,0)=sin(eula_c)*cos(eula_b);
@@ -334,7 +339,17 @@ void CoaxVisionControl::viconCallback(const nav_msgs::Odometry::ConstPtr & vicon
 	   Rwb(2,1)=cos(eula_b)*sin(eula_a);
 	   Rwb(2,2)=cos(eula_b)*cos(eula_a);
 	   Rbw = Rwb.transpose();
-	 */
+	/*Rwb(0,0)=cos(state_yaw[0])*cos(orien[1]);
+	Rwb(0,1)=cos(state_yaw[0])*sin(orien[1])*sin(orien[0])-sin(state_yaw[0])*cos(orien[0]);
+	Rwb(0,2)=cos(state_yaw[0])*sin(orien[1])*cos(orien[0])+sin(state_yaw[0])*sin(orien[0]);
+	Rwb(1,0)=sin(state_yaw[0])*cos(orien[1]);
+	Rwb(1,1)=sin(state_yaw[0])*sin(orien[1])*sin(orien[0])+cos(state_yaw[0])*cos(orien[0]);
+	Rwb(1,2)=sin(state_yaw[0])*sin(orien[1])*cos(orien[0])-cos(state_yaw[0])*sin(orien[0]);
+	Rwb(2,0)=-sin(orien[1]);
+	Rwb(2,1)=cos(orien[1])*sin(orien[0]);
+	Rwb(2,2)=cos(orien[1])*cos(orien[0]);
+	Rbw = Rwb.transpose();
+	*/
 	global_x=vicon->pose.pose.position.x;
 	global_y=vicon->pose.pose.position.y;
 	global_z=vicon->pose.pose.position.z;
@@ -352,17 +367,19 @@ void CoaxVisionControl::viconCallback(const nav_msgs::Odometry::ConstPtr & vicon
 	twist_x=vicon->twist.twist.linear.x;
 	twist_y=vicon->twist.twist.linear.y;
 	twist_z=vicon->twist.twist.linear.z;
-	/*  
-	    twist_ang[0]=vicon->twist.twist.angular.x;
+	  
+    	twist_ang[0]=vicon->twist.twist.angular.x;
 	    twist_ang[1]=vicon->twist.twist.angular.y;
 	    twist_ang[2]=vicon->twist.twist.angular.z; 
 	    twist_ang_w = Rwb*twist_ang;
-	 */
+	
 }
 void CoaxVisionControl::imgCallback(const coax_msgs::imgState::ConstPtr & img){
 	img_yaw =img->theta;
-	img_y = img->y*4/589.75*state_z[0]+state_z[0]*orien[0];	
-	img_x = img->x*4/589.75*state_z[0]+state_z[0]*orien[1];
+        raw_y = state_z[0]*tan(orien[0]);	
+	raw_x = state_z[0]*tan(orien[1]);
+	img_y = img->y*3/640*state_z[0]-raw_y;
+	img_x = img->x*3/640*state_z[0]-raw_x;
 	Eigen::Matrix3f I;
 	Eigen::MatrixXf H(1,3),HT(3,1);
 	Eigen::Vector3f Kyaw,Kx,Ky;
@@ -410,7 +427,7 @@ void CoaxVisionControl::StateCallback(const coax_msgs::CoaxState::ConstPtr & msg
 	rpyt_rc << msg->rcChannel[4], msg->rcChannel[6], msg->rcChannel[2], msg->rcChannel[0];
 	hrange << msg->hranges[0], msg->hranges[1], msg->hranges[2];
 
-	orien[0] = msg->roll-0.01;
+	orien[0] = msg->roll-0.025;
 	orien[1] = -msg->pitch+0.02;
 	orien[2] = -msg->yaw;
 
@@ -430,11 +447,9 @@ void CoaxVisionControl::StateCallback(const coax_msgs::CoaxState::ConstPtr & msg
 		Qx<<pm.Qx1,0,0,
 			0,pm.Qx2,0,
 			0,0,pm.Qx3;
-		
 		Qy<<pm.Qy1,0,0,
 			0,pm.Qy2,0,
 			0,0,pm.Qy3;
-		
 		Qyaw<<pm.Qyaw1,0,0,
 			0,pm.Qyaw2,0,
 			0,0,0;
@@ -461,7 +476,7 @@ void CoaxVisionControl::StateCallback(const coax_msgs::CoaxState::ConstPtr & msg
 	else if(orien[2]<-PI){
 		orien[2]=orien[2]+2*PI;
 	}
-
+	/*
 	Rwb(0,0)=cos(state_yaw[0])*cos(orien[1]);
 	Rwb(0,1)=cos(state_yaw[0])*sin(orien[1])*sin(orien[0])-sin(orien[2])*cos(orien[0]);
 	Rwb(0,2)=cos(state_yaw[0])*sin(orien[1])*cos(orien[0])+sin(orien[2])*sin(orien[0]);
@@ -472,8 +487,7 @@ void CoaxVisionControl::StateCallback(const coax_msgs::CoaxState::ConstPtr & msg
 	Rwb(2,1)=cos(orien[1])*sin(orien[0]);
 	Rwb(2,2)=cos(orien[1])*cos(orien[0]);
 	Rbw = Rwb.transpose();
-
-
+*/
 	rate[2] = gyro[2];
 	rate[1] = gyro[1];
 	rate[0] = gyro[0];
@@ -563,7 +577,7 @@ bool CoaxVisionControl::setRawControl(double motor1, double motor2, double servo
 		raw_control.servo1 = servo_roll;
 		raw_control.servo2 = servo_pitch;
 	}
-	if(stage == 3&&state_z[0]<0.07){
+	if(stage == 3&& state_z[0]<0.08){
 		raw_control.motor1 = 0;
 		raw_control.motor2 = 0;
 		raw_control.servo1 = 0;
@@ -577,16 +591,15 @@ bool CoaxVisionControl::setRawControl(double motor1, double motor2, double servo
 	if(dt>10){
 		dt=0.02;
 	}
-        
-	vicon_state.x=global_x;
+        	vicon_state.x=global_x;
 	vicon_state.y=global_y;
 	vicon_state.z=global_z;
 	vicon_state.vx=twist_x;
 	vicon_state.vy=twist_y;
 	vicon_state.vz=twist_z;
-	vicon_state.roll=img_x;
-	vicon_state.pitch=img_y;
-	vicon_state.yaw=img_yaw;
+	vicon_state.roll=eula_a;
+	vicon_state.pitch=eula_b;
+	vicon_state.yaw=eula_c;
 	vicon_state.state_x = state_x[0];
 	vicon_state.state_y = state_y[0];
 	vicon_state.state_z = state_z[0];
@@ -596,10 +609,10 @@ bool CoaxVisionControl::setRawControl(double motor1, double motor2, double servo
 	vicon_state.orien_roll = orien[0];
 	vicon_state.orien_pitch = orien[1];
 	vicon_state.orien_yaw = state_yaw[0];
-        vicon_state.acc_x = accel[0];
-	vicon_state.acc_y = accel[1];
-	vicon_state.img_x = img_x;
-
+        vicon_state.raw_x = raw_x;
+	vicon_state.raw_y = raw_y;
+	vicon_state.acc_x = rate[2];
+	vicon_state.acc_y = gyro[2];
 	vicon_state_pub.publish(vicon_state);
 
 	return 1;
@@ -715,11 +728,11 @@ void CoaxVisionControl::set_localize(void){
 
 void CoaxVisionControl::set_landing(void){
 	if(des_pos_z>0){
-		if(des_vel_z>-pm.des_vel_z){
+		if(des_vel_z>-pm.des_vel_z/2){
 			des_acc_z = -pm.des_acc_z;
 			des_vel_z = des_vel_z +dt*des_acc_z;
 		}
-		else if(des_vel_z<=-pm.des_vel_z){
+		else if(des_vel_z<=-pm.des_vel_z/2){
 			des_acc_z = 0;
 			des_vel_z = -pm.des_vel_z;
 		}
@@ -803,8 +816,8 @@ void CoaxVisionControl::stabilizationControl(void) {
 		P_z = A*P_z*AT+Qz;
 		Sz = P_z(0,0)+Rz;
 		Kz = P_z*HT/Sz;
-		Yz = sonar_z - state_z[0],
-		   state_z = state_z+Kz*Yz;
+		Yz = sonar_z - state_z[0];
+		state_z = state_z+Kz*Yz;
 		P_z = (I-Kz*H)*P_z;
 
 		state_x = A*state_x+Bx;
@@ -825,7 +838,18 @@ void CoaxVisionControl::stabilizationControl(void) {
 		Daltitude_Int += Daltitude;
 	}
 	altitude_control = -pm.kp_altitude * Daltitude - pm.kd_altitude * Daltitude_rate - pm.ki_altitude * Daltitude_Int;
-	Dx = state_x[0];
+/*	if (state_z[0]>=0.4&&pm.ki_y>0&&pm.ki_x>0){
+		pm.ki_x=pm.ki_x-0.000001;
+		pm.ki_y=pm.ki_y-0.000001;
+		if(pm.ki_x<0||pm.ki_y<0)
+		{	pm.ki_x=0;
+			pm.ki_y=0;
+		}
+		reach_flag = 0;
+	//	ROS_INFO("Dx_int,Dy_int = [%f],[%f]",Dx_int,Dy_int);
+	}
+*/
+	Dx = global_x;
 
 	if(Dx>pm.Dx_max){
 		Dx = pm.Dx_max;
@@ -834,7 +858,7 @@ void CoaxVisionControl::stabilizationControl(void) {
 		Dx = -pm.Dx_max;
 	}
 
-	Dy = state_y[0];
+	Dy = global_y;
 	if(Dy>pm.Dy_max){
 		Dy = pm.Dy_max;
 
@@ -842,21 +866,20 @@ void CoaxVisionControl::stabilizationControl(void) {
 	else if(Dy<-pm.Dy_max){
 		Dy = -pm.Dy_max;
 	}
-	Dx_rate = state_x[1];
-	Dy_rate = state_y[1];
-	Dx_int +=Dx;
-	if (initial_orien == 1){
+	Dx_rate = twist_x;
+	Dy_rate = twist_y;
+	if (initial_orien == 1&&state_z[0]>0.2){
+	        Dx_int +=Dx;
 		Dy_int +=Dy;
+		Dyaw_int +=Dyaw;
+
 	}
 	Fdes_z = altitude_control+pm.m*(gravity+des_acc_z);
-        if(state_z[0]>=altitude_des)
-		pm.ki_xy = 0;
 
-	Fdes_x = -pm.kp_xy*Dx-pm.kd_xy*Dx_rate-pm.ki_xy*Dx_int-pm.kd_pq*rate[1];//pm.kp_pq*orien[1];
-	Fdes_y = -pm.kp_xy*Dy-pm.kd_xy*Dy_rate-pm.ki_xy*Dy_int-pm.kd_pq*rate[0];//-pm.kp_pq*orien[0];
+	Fdes_x = -pm.kp_x*Dx-pm.kd_x*Dx_rate-pm.ki_x*Dx_int-pm.kd_pq*rate[1];//pm.kp_pq*orien[1];
+	Fdes_y = -pm.kp_y*Dy-pm.kd_y*Dy_rate-pm.ki_y*Dy_int-pm.kd_pq*rate[0];//-pm.kp_pq*orien[0];
 	Dyaw_rate = rate[2];
-	Dyaw = state_yaw[0]-des_yaw;
-	Dyaw_int +=Dyaw;
+	Dyaw = eula_c-des_yaw;
 	yaw_control = -pm.kp_yaw * Dyaw - pm.kd_yaw * Dyaw_rate-pm.ki_yaw*Dyaw_int; 
 	Mdes_z = yaw_control-gyro[0]*gyro[1]*(pm.Ixx-pm.Iyy);
 
@@ -968,7 +991,7 @@ int main(int argc, char **argv) {
 	control.loadParams(nh);
 	ros::Duration(1.5).sleep(); 
 
-	control.configureComm(100, SBS_MODES | SBS_BATTERY | SBS_GYRO | SBS_ACCEL | SBS_CHANNELS | SBS_RPY | SBS_ALTITUDE_ALL |SBS_ALL);
+	control.configureComm(100, SBS_MODES|SBS_MAGNETO | SBS_BATTERY | SBS_GYRO | SBS_ACCEL | SBS_CHANNELS | SBS_RPY | SBS_ALTITUDE_ALL |SBS_ALL);
 	// control.setTimeout(500, 5000);
 
 	control.configureControl(SB_CTRL_MANUAL, SB_CTRL_MANUAL, SB_CTRL_MANUAL, SB_CTRL_MANUAL);
@@ -976,7 +999,7 @@ int main(int argc, char **argv) {
 
 	ROS_INFO("Initially Setup comm and control");
 
-	int frequency = 100;
+	int frequency = 60;
 	control.controlPublisher(frequency);
   ros::spin();
   return 0;

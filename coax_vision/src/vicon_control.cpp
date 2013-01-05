@@ -90,13 +90,16 @@ void CoaxVisionControl::loadParams(ros::NodeHandle &n) {
 	n.getParam("altitudecontrol/proportional",pm.kp_altitude);
 	n.getParam("altitudecontrol/differential",pm.kd_altitude);
 	n.getParam("altitudecontrol/integration",pm.ki_altitude);
-  n.getParam("altitudecontrol/xyproportional",pm.kp_xy);
-	n.getParam("altitudecontrol/xydifferential",pm.kd_xy);
-	n.getParam("altitudecontrol/xyintegration",pm.ki_xy); 
-  n.getParam("altitudecontrol/kp_pq",pm.kp_pq);
-  n.getParam("altitudecontrol/kd_pq",pm.kd_pq);
-  n.getParam("altitudecontrol/k_roll",pm.k_roll);
-	n.getParam("altitudecontrol/k_pitch",pm.k_pitch);
+	n.getParam("attitudecontrol/xproportional",pm.kp_x);
+	n.getParam("attitudecontrol/xdifferential",pm.kd_x);
+	n.getParam("attitudecontrol/xintegration",pm.ki_x); 
+	n.getParam("attitudecontrol/yproportional",pm.kp_y);
+	n.getParam("attitudecontrol/ydifferential",pm.kd_y);
+	n.getParam("attitudecontrol/yintegration",pm.ki_y); 
+	n.getParam("attitudecontrol/kp_pq",pm.kp_pq);
+	n.getParam("attitudecontrol/kd_pq",pm.kd_pq);
+	n.getParam("attitudecontrol/k_roll",pm.k_roll);
+	n.getParam("attitudecontrol/k_pitch",pm.k_pitch);
 	n.getParam("linkage_factor/lower",pm.L_lo);
 	n.getParam("max_swashplate_angle",pm.theta_max);
 	n.getParam("phase_lag/slope/lower",pm.mL_lo);
@@ -106,21 +109,21 @@ void CoaxVisionControl::loadParams(ros::NodeHandle &n) {
 	n.getParam("thrust_factor/lower",pm.kT_lo);
 	n.getParam("moment_factor/upper",pm.kM_up);
 	n.getParam("moment_factor/lower",pm.kM_lo);
-  n.getParam("speed_conversion/slope/upper",pm.mM_up);
+	n.getParam("speed_conversion/slope/upper",pm.mM_up);
 	n.getParam("speed_conversion/slope/lower",pm.mM_lo);
 	n.getParam("speed_conversion/offset/upper",pm.bM_up);
 	n.getParam("speed_conversion/offset/lower",pm.bM_lo);
-  n.getParam("offset/roll",pm.offset_roll);
+	n.getParam("offset/roll",pm.offset_roll);
 	n.getParam("offset/pitch",pm.offset_pitch); 
 	n.getParam("imageyawcontrol/proportional",pm.kp_imgyaw);
 	n.getParam("imagerollcontrol/proportional",pm.kp_imgroll);
-  n.getParam("desired/des_pos_z",pm.des_pos_z);
+	n.getParam("desired/des_pos_z",pm.des_pos_z);
 	n.getParam("desired/des_vel_z",pm.des_vel_z);
-  n.getParam("desired/x_distance",pm.x_distance);
+	n.getParam("desired/x_distance",pm.x_distance);
 	n.getParam("desired/y_distance",pm.y_distance);
-  n.getParam("desired/Dx_max",pm.Dx_max);
-  n.getParam("desired/Dy_max",pm.Dy_max);
-  n.getParam("inertia/Ixx",pm.Ixx);
+	n.getParam("desired/Dx_max",pm.Dx_max);
+	n.getParam("desired/Dy_max",pm.Dy_max);
+	n.getParam("inertia/Ixx",pm.Ixx);
 	n.getParam("inertia/Iyy",pm.Iyy);
 
 }
@@ -484,8 +487,8 @@ void CoaxVisionControl::stabilizationControl(void) {
 	Dy_int +=Dy;
 	Fdes_z = altitude_control+pm.m*gravity;
 
-	Fdes_x = -pm.kp_xy*Dx-pm.kd_xy*Dx_rate-pm.ki_xy*Dx_int-pm.kd_pq*twist_ang[1]-pm.kp_pq*eula_b;
-	Fdes_y = -pm.kp_xy*Dy-pm.kd_xy*Dy_rate-pm.ki_xy*Dy_int-pm.kd_pq*twist_ang[0]-pm.kp_pq*eula_a;
+	Fdes_x = -pm.kp_x*Dx-pm.kd_x*Dx_rate-pm.ki_x*Dx_int-pm.kd_pq*twist_ang[1]-pm.kp_pq*eula_b;
+	Fdes_y = -pm.kp_y*Dy-pm.kd_y*Dy_rate-pm.ki_y*Dy_int-pm.kd_pq*twist_ang[0]-pm.kp_pq*eula_a;
 	Dyaw_rate = twist_ang[2];
 	Dyaw = eula_c-des_yaw;
 	Dyaw_int +=Dyaw;

@@ -16,3 +16,7 @@ float64 vel_z
 float64 orien_roll
 float64 orien_pitch
 float64 orien_yaw
+float64 raw_x
+float64 raw_y
+float64 acc_x
+float64 acc_y
